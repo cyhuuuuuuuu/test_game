@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-TW" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小遊戲</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+TC:wght@500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a; --card-bg: #1e293b; --primary: #6366f1; 
+            --primary-glow: rgba(99, 102, 241, 0.3); --text-main: #f1f5f9; 
+            --text-sub: #94a3b8; --danger: #f43f5e; --success: #10b981; --border: #334155;
+        }
+        * { box-sizing: border-box; transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        body { font-family: 'Inter', 'Noto Sans TC', sans-serif; background: var(--bg); color: var(--text-main); margin: 0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
+        .main-content { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; padding: 20px; gap: 20px; flex-wrap: wrap; }
+        .glass-card { background: var(--card-bg); width: 100%; max-width: 500px; border-radius: 28px; border: 1px solid var(--border); padding: 2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); position: relative; overflow: hidden; }
+        
+        /* 自定義彈窗樣式 */
+        #custom-modal {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.8); 
+            display: none; align-items: center; justify-content: center; z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            background: var(--card-bg); border: 1px solid var(--border);
+            padding: 30px; border-radius: 24px; width: 90%; max-width: 400px;
+            text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+            animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes modalPop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        /* 其餘遊戲 UI (保留之前的優化) */
+        .history-panel { background: var(--card-bg); width: 100%; max-width: 320px; height: 580px; border-radius: 28px; border: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+        .history-header { padding: 15px; border-bottom: 1px solid var(--border); background: rgba(15, 23, 42, 0.3); font-weight: 700; text-align: center; font-size: 14px; color: var(--text-sub); }
+        .history-list { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
+        .history-item { padding: 10px; border-radius: 12px; background: rgba(15, 23, 42, 0.4); border-left: 4px solid var(--border); animation: slideIn 0.3s ease; }
+        .history-item.me { border-left-color: var(--success); }
+        .history-item.opp { border-left-color: var(--danger); }
+        .history-item.error { border-left-color: #64748b; opacity: 0.8; }
+        .history-item.system { border-left-color: var(--primary); font-style: italic; }
+        .history-item .meta { font-size: 10px; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; display: flex; justify-content: space-between; }
+        .score-pills { display: flex; gap: 12px; justify-content: center; margin-bottom: 20px; }
+        .pill { background: rgba(15, 23, 42, 0.5); padding: 10px; border-radius: 15px; border: 1px solid var(--border); text-align: center; flex: 1; }
+        .pill .val { font-size: 28px; font-weight: 800; display: block; }
+        .target-num { font-size: 80px; font-weight: 900; color: var(--primary); margin: 5px 0; text-shadow: 0 0 20px var(--primary-glow); text-align: center; }
+        .options-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 20px 0; }
+        .btn-opt { background: var(--card-bg); border: 1px solid var(--border); padding: 15px 5px; border-radius: 12px; font-size: 22px; font-weight: 700; cursor: pointer; color: var(--text-main); box-shadow: 0 4px 0 #0f172a; }
+        .btn-opt:hover:not(:disabled) { border-color: var(--primary); background: #2d3748; }
+        .btn-opt:disabled { opacity: 0.15; cursor: not-allowed; }
+        .selection-track { background: rgba(15, 23, 42, 0.4); border: 2px dashed var(--border); border-radius: 15px; min-height: 70px; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 20px; }
+        .sel-item { background: var(--primary); color: white; padding: 6px 15px; border-radius: 10px; font-weight: 700; font-size: 18px; }
+        .btn { padding: 16px; border-radius: 14px; font-weight: 700; cursor: pointer; border: none; font-size: 16px; width: 100%; }
+        .btn-primary { background: var(--primary); color: white; box-shadow: 0 4px 14px 0 var(--primary-glow); }
+        #overlay { position: absolute; inset: 0; background: var(--success); color: white; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 100; text-align: center; }
+        input { width: 100%; padding: 16px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 15px; background: #0f172a; color: var(--text-main); font-size: 16px; outline: none; }
+        footer { width: 100%; text-align: center; padding: 30px 0; color: var(--text-sub); font-family: monospace; font-size: 14px; letter-spacing: 2px; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+    </style>
+</head>
+<body>
+
+<div id="custom-modal">
+    <div class="modal-content">
+        <h3 id="modal-title" style="margin-top:0; color: var(--primary);">提示</h3>
+        <p id="modal-msg" style="color: var(--text-sub); line-height: 1.6;"></p>
+        <button class="btn btn-primary" onclick="closeModal()">我知道了</button>
+    </div>
+</div>
+
+<div class="main-content">
+    <div class="glass-card">
+        <div id="overlay">
+            <h2 id="overlay-msg" style="font-size: 36px; margin: 0; font-weight: 900;">答對了！</h2>
+            <p style="font-size: 18px; opacity: 0.9; margin: 10px 0;">算式：<span id="formula-text"></span></p>
+            <h1 id="countdown" style="font-size: 60px; font-weight: 900;">5</h1>
+        </div>
+
+        <div id="lobby" style="text-align: center;">
+            <h1 style="margin-top: 0; font-weight: 900; color: var(--primary);">小遊戲</h1>
+            <div style="background: rgba(15, 23, 42, 0.6); padding: 20px; border-radius: 20px; margin-bottom: 25px; border: 1px solid var(--border);">
+                <span style="font-size: 11px; display: block; margin-bottom: 8px; color: var(--text-sub); font-weight: 700;">您的連線房號</span>
+                <b id="my-id" style="font-size: 20px; color: var(--text-main); font-family: monospace;">連線中...</b>
+                <button onclick="copyID()" style="display:block; margin: 12px auto 0; background: var(--primary); color: white; border: none; padding: 8px 15px; border-radius: 10px; cursor: pointer; font-size: 12px; font-weight: 700;">複製房號</button>
+            </div>
+            <input type="text" id="opp-id" placeholder="輸入對手房號...">
+            <button class="btn btn-primary" onclick="join()">加入對戰</button>
+        </div>
+
+        <div id="game" style="display:none; text-align: center;">
+            <div class="score-pills">
+                <div class="pill"><span style="font-size:10px;color:var(--text-sub);font-weight:700">你</span><span class="val" id="score-me">0</span></div>
+                <div class="pill"><span style="font-size:10px;color:var(--text-sub);font-weight:700">對手</span><span class="val" id="score-opp" style="color:var(--danger)">0</span></div>
+            </div>
+            <div class="target-num" id="target">?</div>
+            <div class="selection-track" id="track"></div>
+            <div class="options-grid" id="grid"></div>
+            <div style="display:flex; gap:12px">
+                <button class="btn" style="background:var(--border); flex: 1; color: var(--text-main);" onclick="reset()">重選</button>
+                <button class="btn btn-primary" style="flex: 2;" onclick="submit()">送出答案</button>
+            </div>
+            <div id="msg" style="margin-top:20px; font-weight:700; min-height:24px;"></div>
+        </div>
+    </div>
+
+    <div class="history-panel" id="history-box" style="display:none;">
+        <div class="history-header">對戰紀錄</div>
+        <div class="history-list" id="history-list"></div>
+    </div>
+</div>
+
+<footer>anonymous@2026</footer>
+
+<script>
+    let peer, conn, isHost = false, gameActive = false;
+    let myScore = 0, oppScore = 0, quiz = null, selected = [];
+
+    // 自定義 Alert 函數
+    function customAlert(msg, title = "提示") {
+        document.getElementById('modal-title').innerText = title;
+        document.getElementById('modal-msg').innerText = msg;
+        document.getElementById('custom-modal').style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('custom-modal').style.display = 'none';
+    }
+
+    peer = new Peer();
+    peer.on('open', id => document.getElementById('my-id').innerText = id);
+    
+    peer.on('connection', c => { 
+        if (gameActive) {
+            setTimeout(() => { c.send({ type: 'ROOM_FULL' }); c.close(); }, 500);
+            return;
+        }
+        conn = c; isHost = true; setupConn(); startGame(); 
+    });
+
+    function copyID() {
+        const id = document.getElementById('my-id').innerText;
+        if(id === "連線中...") return;
+        const el = document.createElement('textarea');
+        el.value = id; document.body.appendChild(el); el.select();
+        document.execCommand('copy'); document.body.removeChild(el);
+        customAlert("房號已複製！請傳送給對手。");
+    }
+
+    function join() {
+        const id = document.getElementById('opp-id').value.trim();
+        if(!id || id === document.getElementById('my-id').innerText) return customAlert("請輸入有效的房號！");
+        const tempConn = peer.connect(id);
+        tempConn.on('open', () => { conn = tempConn; isHost = false; setupConn(); startGame(); });
+        setTimeout(() => { if (!tempConn.open) customAlert("連線超時，請檢查房號。"); }, 5000);
+    }
+
+    function setupConn() {
+        conn.on('close', () => handleOpponentDisconnect());
+        conn.on('data', data => {
+            if(data.type === 'ROOM_FULL') { customAlert("該房間已滿，無法加入！"); setTimeout(()=>location.reload(), 2000); }
+            if(data.type === 'QUIZ') startRound(data.quiz);
+            if(data.type === 'SYNC_SCORE') { oppScore = data.oppScore; myScore = data.myScore; refreshScoreUI(); }
+            if(data.type === 'WIN') { addHistory('opp', data.target, data.formula); showWinOverlay(false, data.formula); }
+            if(data.type === 'ERR') { addHistory('error', data.target, data.formula, '對手算錯'); }
+        });
+    }
+
+    function handleOpponentDisconnect() {
+        if (!gameActive) return;
+        gameActive = false;
+        customAlert("對手已離開房間，即將重新整理...");
+        setTimeout(()=>location.reload(), 3000);
+    }
+
+    function startGame() {
+        gameActive = true;
+        document.getElementById('lobby').style.display = 'none';
+        document.getElementById('game').style.display = 'block';
+        document.getElementById('history-box').style.display = 'flex';
+        addHistory('system', '-', '-', '連線成功！開始對決');
+        if(isHost) setTimeout(nextQuiz, 1000);
+    }
+
+    function nextQuiz() {
+        if (!gameActive) return;
+        const q = generateQuiz();
+        conn.send({ type: 'QUIZ', quiz: q });
+        startRound(q);
+    }
+
+    function startRound(q) {
+        quiz = q; selected = [];
+        document.getElementById('overlay').style.display = 'none';
+        document.getElementById('target').innerText = q.target;
+        document.getElementById('msg').innerText = '';
+        renderGrid(); updateTrack();
+    }
+
+    function renderGrid() {
+        const g = document.getElementById('grid'); g.innerHTML = '';
+        quiz.options.forEach(o => {
+            const b = document.createElement('button');
+            b.className = 'btn-opt'; b.innerText = o; 
+            b.onclick = () => { if(selected.length < 3) { selected.push(o); b.disabled = true; updateTrack(); } };
+            g.appendChild(b);
+        });
+    }
+
+    function submit() {
+        if(selected.length !== 3 || !conn.open) return;
+        const formula = selected[0].substring(1) + selected[1] + selected[2];
+        let res; try { res = new Function(`return ${formula}`)(); } catch(e) { res = null; }
+        if(res === quiz.target) {
+            myScore++; refreshScoreUI();
+            addHistory('me', quiz.target, formula);
+            conn.send({ type: 'WIN', formula: formula, target: quiz.target });
+            conn.send({ type: 'SYNC_SCORE', myScore: oppScore, oppScore: myScore });
+            showWinOverlay(true, formula);
+        } else {
+            myScore--; refreshScoreUI();
+            addHistory('error', quiz.target, formula, `你算錯了 (= ${res})`);
+            conn.send({ type: 'ERR', formula: formula, target: quiz.target });
+            conn.send({ type: 'SYNC_SCORE', myScore: oppScore, oppScore: myScore });
+            document.getElementById('msg').innerHTML = `<span style="color:var(--danger)">算錯了！結果是 ${res}</span>`;
+            reset();
+        }
+    }
+
+    function addHistory(type, target, formula, note = '') {
+        const list = document.getElementById('history-list');
+        const item = document.createElement('div');
+        item.className = `history-item ${type}`;
+        let label = type === 'me' ? '你答對了' : (type === 'opp' ? '對手答對' : note);
+        item.innerHTML = `
+            <div class="meta"><span>${label}</span><span>${target==='-'?'': '目標 '+target}</span></div>
+            ${formula==='-'?'':'<div style="font-weight:800;font-size:14px;color:#fff;">'+formula+(type==='error'?' ≠ ':' = ')+target+'</div>'}
+        `;
+        list.prepend(item);
+    }
+
+    function refreshScoreUI() {
+        document.getElementById('score-me').innerText = myScore;
+        document.getElementById('score-opp').innerText = oppScore;
+    }
+
+    function showWinOverlay(isMe, formula) {
+        const o = document.getElementById('overlay'); o.style.display = 'flex';
+        o.style.background = isMe ? 'var(--success)' : 'var(--danger)';
+        document.getElementById('overlay-msg').innerText = isMe ? '🎉 你答對了！' : '🚀 對手搶先了！';
+        document.getElementById('formula-text').innerText = formula;
+        let s = 5; document.getElementById('countdown').innerText = s;
+        const timer = setInterval(() => { s--; if(document.getElementById('countdown')) document.getElementById('countdown').innerText = s; if(s <= 0) { clearInterval(timer); if(isHost) nextQuiz(); } }, 1000);
+    }
+
+    function updateTrack() { document.getElementById('track').innerHTML = selected.map(s => `<span class="sel-item">${s}</span>`).join(''); }
+    function reset() { selected = []; updateTrack(); document.querySelectorAll('.btn-opt').forEach(b => b.disabled = false); }
+
+    function generateQuiz() {
+        const ops=['+','-','*','/'], ns=[1,2,3,4,5,6,7,8,9,10,11,12];
+        let c=[0,1,2].map(()=>ops[Math.floor(Math.random()*4)]+ns[Math.floor(Math.random()*ns.length)]);
+        let exp=c[0].substring(1)+c[1]+c[2], t;
+        try { t=new Function(`return ${exp}`)(); } catch(e) { return generateQuiz(); }
+        if(!Number.isInteger(t) || t<=0 || t>100) return generateQuiz();
+        let o=[...c]; while(o.length<12) { let x=ops[Math.floor(Math.random()*4)]+ns[Math.floor(Math.random()*ns.length)]; if(!o.includes(x)) o.push(x); }
+        return { target: t, options: o.sort(()=>Math.random()-0.5) };
+    }
+</script>
+</body>
+</html>
